@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HUNAR_JAIN :: TERMINAL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #00ff41;
+      --green-dim: #00c032;
+      --green-dark: #003b00;
+      --green-glow: rgba(0, 255, 65, 0.18);
+      --bg: #000000;
+      --scanline: rgba(0,0,0,0.18);
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* CRT scanlines overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        var(--scanline) 2px,
+        var(--scanline) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+      animation: scanroll 8s linear infinite;
+    }
+
+    /* CRT flicker */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, rgba(0,255,65,0.04) 0%, transparent 80%);
+      pointer-events: none;
+      z-index: 9998;
+      animation: flicker 0.15s infinite;
+    }
+
+    @keyframes scanroll {
+      0% { background-position: 0 0; }
+      100% { background-position: 0 100%; }
+    }
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      92% { opacity: 0.97; }
+      93% { opacity: 0.8; }
+      94% { opacity: 0.97; }
+    }
+
+    /* Screen vignette */
+    .vignette {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.75) 100%);
+      pointer-events: none;
+      z-index: 9997;
+    }
+
+    .terminal-wrapper {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* Boot sequence */
+    #boot {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 9000;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 3rem;
+      font-size: 0.95rem;
+    }
+
+    #boot .boot-line {
+      opacity: 0;
+      animation: bootfade 0.05s forwards;
+      white-space: pre;
+    }
+
+    @keyframes bootfade { to { opacity: 1; } }
+
+    /* Blinking cursor */
+    .cursor {
+      display: inline-block;
+      width: 10px;
+      height: 1.1em;
+      background: var(--green);
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+      margin-left: 2px;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* Section reveal */
+    .section { opacity: 0; transform: translateY(8px); transition: opacity 0.4s, transform 0.4s; }
+    .section.visible { opacity: 1; transform: none; }
+
+    /* Header */
+    .ascii-name {
+      font-family: 'VT323', monospace;
+      font-size: clamp(2.8rem, 7vw, 5.5rem);
+      color: var(--green);
+      text-shadow: 0 0 20px var(--green), 0 0 60px rgba(0,255,65,0.4);
+      line-height: 1;
+      letter-spacing: 0.05em;
+    }
+
+    .prompt-label {
+      color: var(--green-dim);
+      font-size: 0.78rem;
+      letter-spacing: 0.15em;
+      margin-top: 0.4rem;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--green-dark);
+      margin: 1.2rem 0;
+      box-shadow: 0 0 8px rgba(0,255,65,0.3);
+    }
+
+    /* Command line style headers */
+    .cmd {
+      color: var(--green-dim);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      margin-bottom: 0.4rem;
+    }
+    .cmd::before { content: '$ '; color: var(--green); }
+
+    .section-title {
+      font-family: 'VT323', monospace;
+      font-size: 1.8rem;
+      color: var(--green);
+      text-shadow: 0 0 12px rgba(0,255,65,0.5);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.2rem;
+    }
+
+    /* Info blocks */
+    .info-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem 2rem;
+      font-size: 0.82rem;
+      margin: 0.6rem 0 1rem;
+      color: #00cc35;
+    }
+    .info-row span::before { content: '▸ '; color: var(--green); }
+
+    /* Bio block */
+    .bio {
+      font-size: 0.88rem;
+      line-height: 1.8;
+      color: #a0ffa0;
+      border-left: 2px solid var(--green-dark);
+      padding-left: 1rem;
+      margin: 0.5rem 0 1.5rem;
+    }
+    .bio .highlight {
+      color: var(--green);
+      text-shadow: 0 0 8px rgba(0,255,65,0.4);
+    }
+
+    /* Job entry */
+    .job {
+      margin-bottom: 1.4rem;
+      border-left: 1px solid var(--green-dark);
+      padding-left: 1rem;
+    }
+    .job-title {
+      font-family: 'VT323', monospace;
+      font-size: 1.2rem;
+      color: var(--green);
+      text-shadow: 0 0 8px rgba(0,255,65,0.4);
+    }
+    .job-meta {
+      font-size: 0.72rem;
+      color: var(--green-dim);
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.1em;
+    }
+    .job ul { list-style: none; }
+    .job ul li {
+      font-size: 0.82rem;
+      color: #a0ffa0;
+      line-height: 1.7;
+    }
+    .job ul li::before { content: '  > '; color: var(--green-dim); }
+
+    /* Project cards */
+    .project {
+      margin-bottom: 1.2rem;
+      padding: 0.8rem 1rem;
+      border: 1px solid var(--green-dark);
+      background: rgba(0,255,65,0.02);
+      position: relative;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .project:hover {
+      border-color: var(--green);
+      box-shadow: 0 0 16px rgba(0,255,65,0.15);
+    }
+    .project-name {
+      font-family: 'VT323', monospace;
+      font-size: 1.2rem;
+      color: var(--green);
+      text-shadow: 0 0 8px rgba(0,255,65,0.4);
+    }
+    .project p {
+      font-size: 0.8rem;
+      color: #a0ffa0;
+      margin-top: 0.3rem;
+      line-height: 1.6;
+    }
+    .project-tag {
+      position: absolute;
+      top: 0.8rem;
+      right: 0.8rem;
+      font-size: 0.65rem;
+      color: var(--green-dim);
+      border: 1px solid var(--green-dark);
+      padding: 0.1rem 0.4rem;
+      letter-spacing: 0.1em;
+    }
+
+    /* Skills grid */
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.8rem;
+      margin-top: 0.5rem;
+    }
+    .skill-block {
+      border: 1px solid var(--green-dark);
+      padding: 0.7rem 0.9rem;
+      background: rgba(0,255,65,0.02);
+    }
+    .skill-block-label {
+      font-size: 0.65rem;
+      color: var(--green-dim);
+      letter-spacing: 0.2em;
+      margin-bottom: 0.4rem;
+    }
+    .skill-block-items {
+      font-size: 0.82rem;
+      color: var(--green);
+      line-height: 1.7;
+    }
+
+    /* Progress bars for skills */
+    .skill-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin: 0.3rem 0;
+      font-size: 0.78rem;
+    }
+    .skill-bar-label { min-width: 120px; color: #a0ffa0; }
+    .skill-bar-track {
+      flex: 1;
+      height: 6px;
+      background: var(--green-dark);
+      position: relative;
+      overflow: hidden;
+    }
+    .skill-bar-fill {
+      height: 100%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      width: 0;
+      transition: width 1.2s ease;
+    }
+    .skill-bar-pct { font-size: 0.7rem; color: var(--green-dim); min-width: 32px; text-align: right; }
+
+    /* Achievements */
+    .achievement {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+      margin-bottom: 0.7rem;
+      font-size: 0.82rem;
+    }
+    .achievement-icon { color: var(--green); font-size: 1rem; flex-shrink: 0; }
+    .achievement-text { color: #a0ffa0; line-height: 1.6; }
+    .achievement-text strong { color: var(--green); }
+
+    /* Education */
+    .edu-block {
+      border: 1px solid var(--green-dark);
+      padding: 1rem 1.2rem;
+      background: rgba(0,255,65,0.02);
+    }
+    .edu-degree { font-family: 'VT323', monospace; font-size: 1.3rem; color: var(--green); }
+    .edu-meta { font-size: 0.75rem; color: var(--green-dim); margin-top: 0.2rem; letter-spacing: 0.1em; }
+    .edu-cgpa { font-size: 0.82rem; color: #a0ffa0; margin-top: 0.5rem; }
+    .edu-cgpa span { color: var(--green); }
+
+    /* Contact links */
+    .links-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 0.8rem;
+    }
+    .link-btn {
+      display: inline-block;
+      padding: 0.45rem 1rem;
+      border: 1px solid var(--green-dim);
+      color: var(--green);
+      text-decoration: none;
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      transition: all 0.2s;
+      font-family: 'Share Tech Mono', monospace;
+    }
+    .link-btn:hover {
+      background: rgba(0,255,65,0.12);
+      box-shadow: 0 0 14px rgba(0,255,65,0.3);
+      border-color: var(--green);
+    }
+    .link-btn::before { content: '['; margin-right: 0.3rem; }
+    .link-btn::after { content: ']'; margin-left: 0.3rem; }
+
+    /* Quote */
+    .quote-block {
+      border: 1px solid var(--green-dark);
+      padding: 1rem 1.5rem;
+      margin: 1.5rem 0;
+      font-family: 'VT323', monospace;
+      font-size: 1.4rem;
+      color: var(--green);
+      text-shadow: 0 0 12px rgba(0,255,65,0.4);
+      text-align: center;
+      letter-spacing: 0.05em;
+      line-height: 1.5;
+    }
+    .quote-block::before { content: '"'; opacity: 0.4; margin-right: 0.3rem; }
+    .quote-block::after  { content: '"'; opacity: 0.4; margin-left: 0.3rem; }
+
+    /* Status bar */
+    .statusbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--green);
+      color: #000;
+      font-size: 0.7rem;
+      padding: 0.2rem 1rem;
+      display: flex;
+      gap: 2rem;
+      z-index: 8000;
+      letter-spacing: 0.1em;
+    }
+
+    /* typing effect */
+    .typewriter { overflow: hidden; white-space: nowrap; border-right: 2px solid var(--green); width: 0; animation: typing 1s steps(30) forwards, blink-caret 0.7s step-end infinite; }
+    @keyframes typing { to { width: 100%; } }
+    @keyframes blink-caret { 0%, 100% { border-color: var(--green); } 50% { border-color: transparent; } }
+
+    /* glitch */
+    .glitch {
+      position: relative;
+      display: inline-block;
+    }
+    .glitch:hover::before, .glitch:hover::after {
+      content: attr(data-text);
+      position: absolute;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+    }
+    .glitch:hover::before {
+      color: #ff0040;
+      animation: glitch1 0.3s infinite;
+      clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+      transform: translateX(-3px);
+    }
+    .glitch:hover::after {
+      color: #00f7ff;
+      animation: glitch2 0.3s infinite;
+      clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+      transform: translateX(3px);
+    }
+    @keyframes glitch1 { 0%,100%{transform:translateX(-3px)} 50%{transform:translateX(3px)} }
+    @keyframes glitch2 { 0%,100%{transform:translateX(3px)} 50%{transform:translateX(-3px)} }
+
+    /* matrix rain canvas */
+    #matrix-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: -1;
+      opacity: 0.07;
+    }
+
+    @media (max-width: 600px) {
+      .terminal-wrapper { padding: 1rem 0.8rem 4rem; }
+      .ascii-name { font-size: 2.5rem; }
+      .skills-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="matrix-canvas"></canvas>
+<div class="vignette"></div>
+
+<!-- Boot screen -->
+<div id="boot"></div>
+
+<!-- Main terminal content (hidden until boot done) -->
+<div id="main" style="display:none">
+  <div class="terminal-wrapper">
+
+    <!-- HEADER -->
+    <div class="section" id="s-header">
+      <div class="prompt-label">root@portfolio:~$&nbsp;&nbsp;./hunar_jain.exe</div>
+      <hr class="divider">
+      <div class="ascii-name glitch" data-text="HUNAR JAIN">HUNAR JAIN</div>
+      <div class="prompt-label" style="margin-top:0.6rem">B.TECH CS (CYBER PHYSICAL SYSTEMS) &nbsp;|&nbsp; JAIN UNIVERSITY &nbsp;|&nbsp; BENGALURU</div>
+      <hr class="divider">
+
+      <div class="info-row">
+        <span>+91-7892943984</span>
+        <span>hunarwork11@gmail.com</span>
+        <span>linkedin.com/in/hunard</span>
+        <span>github.com/hunard/hunar</span>
+      </div>
+
+      <div class="links-row">
+        <a class="link-btn" href="mailto:hunarwork11@gmail.com">EMAIL</a>
+        <a class="link-btn" href="https://linkedin.com/in/hunard" target="_blank">LINKEDIN</a>
+        <a class="link-btn" href="https://github.com/hunard/hunar" target="_blank">GITHUB</a>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ABOUT -->
+    <div class="section" id="s-about">
+      <div class="cmd">cat about.txt</div>
+      <div class="section-title">// INITIALIZING PROFILE</div>
+      <div class="bio">
+        A Computer Science student fueled by curiosity and the spirit of a true sportswoman. I see every challenge as a <span class="highlight">game-winning opportunity</span>. As the <span class="highlight">university representative</span> of Cybersmart, I've honed technical expertise in <span class="highlight">AI, IoT, and blockchain</span> while crafting vibrant communities that spark innovation.<br><br>
+        I lead teams with the conviction that belief is the greatest catalyst:
+      </div>
+      <div class="quote-block">When you believe you can, you're already halfway there.</div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- EXPERIENCE -->
+    <div class="section" id="s-exp">
+      <div class="cmd">ls -la experience/</div>
+      <div class="section-title">// WORK_LOG</div>
+
+      <div class="job">
+        <div class="job-title">FOUNDER'S OFFICE INTERN</div>
+        <div class="job-meta">ZAVE &nbsp;▸&nbsp; SEPT 2025 – JAN 2026</div>
+        <ul>
+          <li>Led end-to-end execution across product, operations, and strategy initiatives</li>
+          <li>Worked directly with founders on high-impact decisions and execution</li>
+          <li>Managed cross-functional coordination across teams to ensure delivery</li>
+          <li>Built structured workflows and improved internal processes</li>
+        </ul>
+      </div>
+
+      <div class="job">
+        <div class="job-title">OUTREACH &amp; SOCIAL MEDIA INTERN</div>
+        <div class="job-meta">NEXATHREAD &nbsp;▸&nbsp; JAN 2025 – MAR 2025</div>
+        <ul>
+          <li>Contributed to content strategy, improving engagement and visibility</li>
+          <li>Supported business-facing initiatives aligning marketing with company goals</li>
+        </ul>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- PROJECTS -->
+    <div class="section" id="s-proj">
+      <div class="cmd">find ./projects -type f</div>
+      <div class="section-title">// ACTIVE_PROJECTS</div>
+
+      <div class="project">
+        <span class="project-tag">SIM_SYS</span>
+        <div class="project-name">SMART FACTORY SIMULATION SYSTEM</div>
+        <p>Built a simulation-based system modelling smart factory operations and workflows. Designed system interactions, process flows, and real-time behavior logic. Simulated component-level interactions within a production environment, structured for testing efficiency, automation, and optimization scenarios.</p>
+      </div>
+
+      <div class="project">
+        <span class="project-tag">IoT</span>
+        <div class="project-name">ECO SMART BIN</div>
+        <p>Developed a sensor-based smart waste management system for automation. Leverages IoT architecture to detect and respond to real-time inputs for efficient, scalable waste handling.</p>
+      </div>
+
+      <div class="project">
+        <span class="project-tag">AGRI-TECH</span>
+        <div class="project-name">PROJECT KISSAN</div>
+        <p>Built a solution addressing real-world agricultural inefficiencies. Designed to bridge the gap between traditional farming and modern technology, enabling smarter decision-making for farmers.</p>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- SKILLS -->
+    <div class="section" id="s-skills">
+      <div class="cmd">cat skills.json</div>
+      <div class="section-title">// TECH_STACK</div>
+
+      <div style="margin: 1rem 0 0.5rem">
+        <div class="skill-bar-row">
+          <span class="skill-bar-label">Python</span>
+          <div class="skill-bar-track"><div class="skill-bar-fill" data-w="85"></div></div>
+          <span class="skill-bar-pct">85%</span>
+        </div>
+        <div class="skill-bar-row">
+          <span class="skill-bar-label">C</span>
+          <div class="skill-bar-track"><div class="skill-bar-fill" data-w="75"></div></div>
+          <span class="skill-bar-pct">75%</span>
+        </div>
+        <div class="skill-bar-row">
+          <span class="skill-bar-label">JavaScript</span>
+          <div class="skill-bar-track"><div class="skill-bar-fill" data-w="70"></div></div>
+          <span class="skill-bar-pct">70%</span>
+        </div>
+        <div class="skill-bar-row">
+          <span class="skill-bar-label">IoT Systems</span>
+          <div class="skill-bar-track"><div class="skill-bar-fill" data-w="80"></div></div>
+          <span class="skill-bar-pct">80%</span>
+        </div>
+        <div class="skill-bar-row">
+          <span class="skill-bar-label">System Design</span>
+          <div class="skill-bar-track"><div class="skill-bar-fill" data-w="72"></div></div>
+          <span class="skill-bar-pct">72%</span>
+        </div>
+      </div>
+
+      <div class="skills-grid" style="margin-top:1.2rem">
+        <div class="skill-block">
+          <div class="skill-block-label">LANGUAGES</div>
+          <div class="skill-block-items">Python<br>C<br>JavaScript</div>
+        </div>
+        <div class="skill-block">
+          <div class="skill-block-label">CORE CONCEPTS</div>
+          <div class="skill-block-items">Data Structures<br>OOP<br>System Design</div>
+        </div>
+        <div class="skill-block">
+          <div class="skill-block-label">DOMAINS</div>
+          <div class="skill-block-items">Simulation Systems<br>IoT<br>Cyber-Physical</div>
+        </div>
+        <div class="skill-block">
+          <div class="skill-block-label">TOOLS</div>
+          <div class="skill-block-items">Git<br>GitHub</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ACHIEVEMENTS -->
+    <div class="section" id="s-ach">
+      <div class="cmd">grep -r "achievement" records/</div>
+      <div class="section-title">// ACHIEVEMENTS_&amp;_CERTS</div>
+
+      <div style="margin-top:0.8rem">
+        <div class="achievement">
+          <span class="achievement-icon">[★]</span>
+          <div class="achievement-text"><strong>Semiconductor Manufacturing &amp; Fabrication</strong> — IISc Bangalore</div>
+        </div>
+        <div class="achievement">
+          <span class="achievement-icon">[★]</span>
+          <div class="achievement-text"><strong>Selected — PAN India Hackathon</strong> INCEPTRIX</div>
+        </div>
+        <div class="achievement">
+          <span class="achievement-icon">[★]</span>
+          <div class="achievement-text"><strong>Finalist</strong> — Jain Entrepreneurship Festival</div>
+        </div>
+        <div class="achievement">
+          <span class="achievement-icon">[★]</span>
+          <div class="achievement-text"><strong>LEADER Program</strong> — IVEY Business School, Canada</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- EDUCATION -->
+    <div class="section" id="s-edu">
+      <div class="cmd">cat education.log</div>
+      <div class="section-title">// EDUCATION</div>
+      <div class="edu-block" style="margin-top:0.8rem">
+        <div class="edu-degree">JAIN UNIVERSITY</div>
+        <div class="edu-meta">B.TECH — COMPUTER SCIENCE (CYBER PHYSICAL SYSTEMS) &nbsp;|&nbsp; 2024 – 2028</div>
+        <div class="edu-cgpa">CGPA: <span>7.8</span> &nbsp;/&nbsp; 10.0</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- FOOTER -->
+    <div class="section" id="s-footer" style="text-align:center; padding: 1.5rem 0 2rem">
+      <div style="font-size:0.72rem; color:var(--green-dim); letter-spacing:0.2em; margin-bottom:0.5rem">SESSION ACTIVE &nbsp;|&nbsp; ALL SYSTEMS NOMINAL</div>
+      <div class="ascii-name" style="font-size:1.6rem; opacity:0.3">HUNAR_JAIN.exe</div>
+      <div style="font-size:0.7rem; color:var(--green-dark); margin-top:0.5rem; letter-spacing:0.1em">© 2026 — BUILT WITH CAFFEINE &amp; CURIOSITY</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="statusbar" id="statusbar" style="display:none">
+  <span>STATUS: ONLINE</span>
+  <span>USER: HUNAR_JAIN</span>
+  <span id="clock"></span>
+  <span>LOCATION: BENGALURU, IN</span>
+</div>
+
+<script>
+  // ── Matrix Rain ──────────────────────────────────────────────
+  const canvas = document.getElementById('matrix-canvas');
+  const ctx = canvas.getContext('2d');
+  function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;,.<>?アイウエオカキクケコ';
+  const fontSize = 13;
+  let cols = Math.floor(canvas.width / fontSize);
+  let drops = Array.from({length: cols}, () => Math.random() * -100);
+  function drawMatrix() {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#00ff41';
+    ctx.font = fontSize + 'px Share Tech Mono';
+    cols = Math.floor(canvas.width / fontSize);
+    drops.length = cols;
+    for (let i = 0; i < cols; i++) {
+      const char = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+  }
+  setInterval(drawMatrix, 50);
+
+  // ── Clock ──────────────────────────────────────────────────────
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+      'TIME: ' + now.toLocaleTimeString('en-GB', {hour12: false});
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // ── Boot sequence ─────────────────────────────────────────────
+  const bootEl = document.getElementById('boot');
+  const bootLines = [
+    'BIOS v2.26.04 ... OK',
+    'Initializing memory ... 16384 MB ... OK',
+    'Loading kernel modules ...',
+    '  [  OK  ] Started cryptographic subsystem',
+    '  [  OK  ] Loaded firewall rules',
+    '  [  OK  ] Mounted /home/hunar',
+    '  [  OK  ] Started network interface eth0',
+    'Authenticating user: hunar_jain ...',
+    'Access granted.',
+    '',
+    'Parsing profile data ... DONE',
+    'Building experience_log.bin ... DONE',
+    'Compiling skills_matrix.so ... DONE',
+    'Mounting achievement_vault ... DONE',
+    '',
+    '> Launching portfolio interface ...',
+    '',
+  ];
+
+  let lineIndex = 0;
+  function addBootLine() {
+    if (lineIndex >= bootLines.length) {
+      setTimeout(() => {
+        bootEl.style.transition = 'opacity 0.6s';
+        bootEl.style.opacity = '0';
+        setTimeout(() => {
+          bootEl.style.display = 'none';
+          document.getElementById('main').style.display = 'block';
+          document.getElementById('statusbar').style.display = 'flex';
+          revealSections();
+        }, 600);
+      }, 300);
+      return;
+    }
+    const line = document.createElement('div');
+    line.className = 'boot-line';
+    line.textContent = bootLines[lineIndex];
+    line.style.animationDelay = '0s';
+    bootEl.appendChild(line);
+    lineIndex++;
+    setTimeout(addBootLine, lineIndex < 10 ? 80 : 40);
+  }
+  addBootLine();
+
+  // ── Scroll reveal ──────────────────────────────────────────────
+  function revealSections() {
+    const sections = document.querySelectorAll('.section');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); animateBars(e.target); } });
+    }, {threshold: 0.1});
+    sections.forEach(s => io.observe(s));
+  }
+
+  // ── Skill bars ─────────────────────────────────────────────────
+  function animateBars(section) {
+    section.querySelectorAll('.skill-bar-fill').forEach(bar => {
+      const w = bar.getAttribute('data-w');
+      setTimeout(() => { bar.style.width = w + '%'; }, 100);
+    });
+  }
+</script>
+</body>
+</html>
